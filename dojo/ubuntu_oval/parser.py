@@ -6,76 +6,64 @@ from dojo.models import Endpoint, Finding
 
 class UbuntuOVALParser(object):
     """
-    Ubuntu Oval
+    UbuntuOVAL
     """
 
     def get_scan_types(self):
         return ["Ubuntu OVAL"]
 
     def get_label_for_scan_types(self, scan_type):
-        return "Ubuntu OVAL"
+        return "Ubunut OVAL"
 
     def get_description_for_scan_types(self, scan_type):
-        return "Ubuntu OVAL file can be imported in JSON format (option --json)."
+        return "Ubuntu OVAL"
 
     def get_findings(self, file, test):
-        #severities_scores = {'Info': 0, 'Low':1, 'Medium': 2, 'High': 3, 'Critical' :4}
-        #severity = 'info'
         dupes = dict()
-        print('!Hello worlds:)')
-        full_tree = json.load(file)
-        for tree in full_tree:
-            #severities_scores = {'Info': 0, 'Low':1, 'Medium': 2, 'High': 3, 'Critical' :4}
-            #severity = 'Info'
-            dupes = dict()
-            full_tree = json.load(file)
-            for tree in full_tree:
-                customer = tree['customer']
-                server_type = tree['server_type']
-                descriptions = []
-
-                for node in tree['findings']:
-                    descriptions.append(node['title'])
-                    for reference in node['references'][:3]:
-                        descriptions.append(f" - {reference['ref_url']}")
-
-         #       for node in tree['findings']:
-         #           vuln_severity = node['severity'].capitalize()
-         #           print(vuln_severity)
-         #           if vuln_severity == 'Negligible':
-         #               vuln_severity = 'Info'
-         #           elif vuln_severity == 'None':
-         #               vuln_severity = 'Info'
-         #           if severities_scores[vuln_severity] > severities_scores[severity]:
-         #               severity = vuln_severity
-
-         #   finding.severity = severity
-            finding.severity = 'High'
-            findings_count = len(descriptions) 
+        tree = json.load(file)
+        for branch in tree:
             finding = Finding(test=test)
-            title = f"{customer}_{server_type}_{findings_count}-vulnerabilites"
-            finding.title = title
+            count = 0 # Vulnerabilites count
+            descriptions = []
+            severities_scores = {'Info': 0, 'Low':1, 'Medium': 2, 'High': 3, 'Critical' :4}
+            severity = 'Info'
+
+            for node in branch['findings']:
+                descriptions.append(node['title'])
+                count = count + 1
+                for reference in node['references'][:3]:
+                    descriptions.append(f" - {reference['ref_url']}")
             
-            str_description = "\n".join(descriptions)
-            finding.description = str_description
+            for node in branch['findings']:
+                vuln_severity = node['severity'].capitalize()
+                if vuln_severity == 'Negligible':
+                    vuln_severity = 'Info'
+                elif vuln_severity == 'None':
+                    vuln_severity = 'Info'
+                if severities_scores[vuln_severity] > severities_scores[severity]:
+                    severity = vuln_severity
+
+            finding.severity = severity
+            customer = branch['customer']
+            server_type = branch['server_type']
+            finding.title = f"{customer}_{server_type}_{count}-vulnerabilites"
+            finding.description = "\n".join(descriptions)
             finding.component_name = "Ubuntu OS"
             finding.cwe=1395
-            finding.vuln_id_from_tool = hashlib.sha256(str_description.encode('utf-8')).hexdigest()
-            finding.url = f'{customer}_{server_type}' 
+            finding.vuln_id_from_tool = hashlib.sha256(finding.description.encode('utf-8')).hexdigest()
             finding.unsaved_endpoints = list()
 
-            # internal de-duplication
-            dupe_key = hashlib.sha256(str(finding.title + finding.vuln_id_from_tool).encode('utf-8')).hexdigest()
+            print(f'{customer} {server_type} {finding.title}')
+            dupe_key = hashlib.sha256(str(finding.title).encode('utf-8')).hexdigest()
 
             if dupe_key in dupes:
                 find = dupes[dupe_key]
                 if finding.description:
                     find.description += "\n" + finding.description
-                find.unsaved_endpoints.extend(finding.unsaved_endpoints)
-                dupes[dupe_key] = find
+                    find.unsaved_endpoints.extend(finding.unsaved_endpoints)
+                    dupes[dupe_key] = find
             else:
                 dupes[dupe_key] = finding
-
         return list(dupes.values())
 
     def convert_severity(self, num_severity):
@@ -88,3 +76,4 @@ class UbuntuOVALParser(object):
             return "High"
         else:
             return "Info"
+
